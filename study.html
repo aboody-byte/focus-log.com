@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>FocusLog</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <style>
+    * { box-sizing: border-box; font-family: "Segoe UI", sans-serif; }
+    body { margin: 0; background: #f5f7fb; color: #1f2937; }
+
+    header {
+      background: #fff;
+      padding: 16px 32px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    h1 { color: #14b8a6; font-size: 20px; }
+
+    .month-nav { display: flex; align-items: center; gap: 12px; }
+    .arrow { cursor: pointer; font-size: 20px; padding: 6px 10px; border-radius: 8px; }
+    .arrow:hover { background: #e5e7eb; }
+
+    .container {
+      padding: 32px;
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 24px;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+    }
+
+    .progress-bar {
+      background: #e5e7eb;
+      height: 10px;
+      border-radius: 10px;
+      overflow: hidden;
+      margin: 12px 0;
+    }
+
+    .progress { height: 100%; background: #14b8a6; width: 0%; }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin-top: 16px;
+    }
+
+    .stat {
+      background: #f9fafb;
+      padding: 16px;
+      border-radius: 12px;
+      text-align: center;
+    }
+
+    .chart {
+      height: 220px;
+      display: flex;
+      align-items: flex-end;
+      gap: 6px;
+      margin-top: 16px;
+    }
+
+    .bar {
+      width: 12px;
+      background: #14b8a6;
+      border-radius: 6px;
+    }
+
+    .session {
+      display: flex;
+      justify-content: space-between;
+      background: #f9fafb;
+      padding: 10px;
+      border-radius: 10px;
+      margin-top: 8px;
+    }
+
+    .remove-btn { cursor: pointer; color: #ef4444; }
+
+    .edit-goal {
+      font-size: 14px;
+      cursor: pointer;
+      color: #14b8a6;
+      margin-left: 8px;
+    }
+
+    form input, form button {
+      width: 100%;
+      padding: 12px;
+      margin-top: 12px;
+      border-radius: 10px;
+      border: 1px solid #d1d5db;
+    }
+
+    form button {
+      background: #14b8a6;
+      color: white;
+      border: none;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    @media (max-width: 900px) {
+      .container { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+
+<body>
+
+<header>
+  <h1>📘 FocusLog</h1>
+  <div class="month-nav">
+    <span class="arrow" id="prevMonth">◀</span>
+    <strong id="monthLabel"></strong>
+    <span class="arrow" id="nextMonth">▶</span>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- LEFT -->
+  <div>
+    <div class="card">
+      <h2>
+        Monthly Progress
+        <span class="edit-goal" id="editGoal">✏️ Edit Goal</span>
+      </h2>
+
+      <p id="goalText"></p>
+
+      <div class="progress-bar">
+        <div class="progress" id="progressBar"></div>
+      </div>
+
+      <div class="stats">
+        <div class="stat">
+          <small>DONE</small>
+          <h2 id="done">0 hrs</h2>
+        </div>
+        <div class="stat">
+          <small>REMAINING</small>
+          <h2 id="remaining">0 hrs</h2>
+        </div>
+        <div class="stat">
+          <small>PROGRESS</small>
+          <h2 id="percent">0%</h2>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:24px;">
+      <h2>Daily Activity</h2>
+      <div class="chart" id="chart"></div>
+    </div>
+
+    <div class="card" style="margin-top:24px;">
+      <h2>Recent Sessions</h2>
+      <div id="sessions"></div>
+    </div>
+  </div>
+
+  <!-- RIGHT -->
+  <div>
+    <div class="card">
+      <h2>⏱ Log Study</h2>
+      <form id="studyForm">
+        <input type="date" id="dateInput" required />
+        <input type="number" id="hoursInput" placeholder="Hours Studied" min="0.5" step="0.5" required />
+        <input type="text" id="subjectInput" placeholder="Subject" />
+        <button type="submit">Log Study Time</button>
+      </form>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  let currentDate = new Date();
+  let goalHours = 50;
+  let sessions = [];
+
+  const monthLabel = document.getElementById("monthLabel");
+  const goalText = document.getElementById("goalText");
+  const progressBar = document.getElementById("progressBar");
+  const doneEl = document.getElementById("done");
+  const remainingEl = document.getElementById("remaining");
+  const percentEl = document.getElementById("percent");
+  const chart = document.getElementById("chart");
+  const sessionsEl = document.getElementById("sessions");
+  const dateInput = document.getElementById("dateInput");
+
+  function updateMonthUI() {
+    monthLabel.textContent = currentDate.toLocaleDateString(undefined, {
+      month: "long",
+      year: "numeric"
+    });
+    dateInput.value = currentDate.toISOString().split("T")[0];
+    updateChart();
+  }
+
+  function updateStats() {
+    const total = sessions.reduce((s, a) => s + a.hours, 0);
+    const percent = Math.min(100, (total / goalHours) * 100);
+
+    goalText.textContent = `${total} hrs done • ${goalHours} hrs goal`;
+    doneEl.textContent = `${total} hrs`;
+    remainingEl.textContent = `${Math.max(0, goalHours - total)} hrs`;
+    percentEl.textContent = `${percent.toFixed(0)}%`;
+    progressBar.style.width = percent + "%";
+  }
+
+  function updateChart() {
+    chart.innerHTML = "";
+    const daysInMonth = new Date(
+      currentDate.getFullYear(),
+      currentDate.getMonth() + 1,
+      0
+    ).getDate();
+
+    const daily = Array(daysInMonth).fill(0);
+
+    sessions.forEach(s => {
+      const d = new Date(s.date);
+      if (
+        d.getMonth() === currentDate.getMonth() &&
+        d.getFullYear() === currentDate.getFullYear()
+      ) {
+        daily[d.getDate() - 1] += s.hours;
+      }
+    });
+
+    daily.forEach(h => {
+      const bar = document.createElement("div");
+      bar.className = "bar";
+      bar.style.height = (h * 40) + "px";
+      chart.appendChild(bar);
+    });
+  }
+
+  function renderSessions() {
+    sessionsEl.innerHTML = "";
+    sessions.forEach((s, i) => {
+      const div = document.createElement("div");
+      div.className = "session";
+      div.innerHTML = `
+        <span>${s.date} • ${s.hours} hrs • ${s.subject || "General"}</span>
+        <span class="remove-btn" onclick="removeSession(${i})">🗑</span>
+      `;
+      sessionsEl.appendChild(div);
+    });
+  }
+
+  function removeSession(i) {
+    sessions.splice(i, 1);
+    updateStats();
+    updateChart();
+    renderSessions();
+  }
+
+  document.getElementById("studyForm").addEventListener("submit", e => {
+    e.preventDefault();
+
+    sessions.push({
+      date: dateInput.value,
+      hours: Number(hoursInput.value),
+      subject: subjectInput.value
+    });
+
+    updateStats();
+    updateChart();
+    renderSessions();
+    e.target.reset();
+    updateMonthUI();
+  });
+
+  document.getElementById("editGoal").onclick = () => {
+    const g = prompt("Set new monthly goal (hours):", goalHours);
+    if (g && !isNaN(g) && g > 0) {
+      goalHours = Number(g);
+      updateStats();
+    }
+  };
+
+  document.getElementById("prevMonth").onclick = () => {
+    currentDate.setMonth(currentDate.getMonth() - 1);
+    updateMonthUI();
+  };
+
+  document.getElementById("nextMonth").onclick = () => {
+    currentDate.setMonth(currentDate.getMonth() + 1);
+    updateMonthUI();
+  };
+
+  dateInput.addEventListener("change", () => {
+    currentDate = new Date(dateInput.value);
+    updateMonthUI();
+  });
+
+  updateMonthUI();
+  updateStats();
+</script>
+
+</body>
+</html>
